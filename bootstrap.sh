@@ -11,34 +11,26 @@ trap cleanup EXIT
 mkdir -p "$TMP"
 cd "$TMP"
 
-# Download tarball (no git needed)
+# Get repo as tarball (no git required)
 curl -fsSL "https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz" -o pkgwatch.tgz
 tar -xzf pkgwatch.tgz
 cd "pkgwatch-${BRANCH}"
 
-# Ensure required tools
-if command -v apt-get >/dev/null 2>&1; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -y
-  apt-get install -y dos2unix curl coreutils util-linux auditd >/dev/null
-else
-  echo "Unsupported system: apt-get not found"
-  exit 1
-fi
+# Ensure deps needed for install + CRLF fix
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y bash curl coreutils util-linux dos2unix auditd git >/dev/null
 
-# Auto-fix CRLF -> LF for all relevant files
-find . -type f \( -name "*.sh" -o -name "*.service" -o -name "*.timer" -o -name "*.path" \) -print0 \
+# Fix CRLF -> LF in repo files before running installer
+find . -type f \( -name "*.sh" -o -name "*.service" -o -name "*.timer" -o -name "*.path" -o -name "*.conf*" \) -print0 \
   | xargs -0 dos2unix -q || true
 
-# Run the real installer from the fixed files
-chmod +x ./install.sh 2>/dev/null || true
-chmod +x ./pkgwatch_install.sh 2>/dev/null || true
-
+# Run installer
 if [[ -f ./install.sh ]]; then
   bash ./install.sh
 elif [[ -f ./pkgwatch_install.sh ]]; then
   bash ./pkgwatch_install.sh
 else
-  echo "No installer found (install.sh / pkgwatch_install.sh)."
+  echo "ERROR: No installer found (install.sh or pkgwatch_install.sh)."
   exit 1
 fi
