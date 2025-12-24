@@ -1,0 +1,7 @@
+[Unit]
+Description=PkgWatch auditd summary flush to Telegram
+After=auditd.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pkgwatch/bin/pkgwatch-audit-flush.sh
