@@ -45,6 +45,7 @@ install_deps() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
   apt-get install -y curl coreutils util-linux
+  apt-get install -y curl coreutils util-linux auditd
 }
 
 create_dirs() {
@@ -147,4 +148,5 @@ main() {
 }
 
 main "$@"
+
 
