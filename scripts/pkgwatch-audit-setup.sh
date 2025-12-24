@@ -1,42 +1,35 @@
 #!/usr/bin/env bash
-set -eu
-( set -o pipefail ) 2>/dev/null && set -o pipefail || true
+set -euo pipefail
 
-INSTALL_DIR="/opt/pkgwatch"
-CONF="${INSTALL_DIR}/etc/pkgwatch.conf"
-[[ -r "${CONF}" ]] || exit 0
-# shellcheck disable=SC1090
-source <(sed 's/\r$//' "${CONF}")
+# Create auditd rules to detect suspicious script installs / persistence patterns
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y auditd >/dev/null
+RULES_FILE="/etc/audit/rules.d/pkgwatch.rules"
 
-cat >/etc/audit/rules.d/pkgwatch.rules <<'EOF'
--w /usr/bin/git  -p x -k pkgwatch_git
--w /bin/git      -p x -k pkgwatch_git
+mkdir -p /etc/audit/rules.d
 
--w /usr/bin/curl -p x -k pkgwatch_net
--w /bin/curl     -p x -k pkgwatch_net
+cat > "${RULES_FILE}" <<'EOF'
+# pkgwatch: git activity (repos / scripts)
+-w /usr/bin/git -p x -k pkgwatch_git
+-w /bin/git -p x -k pkgwatch_git
 
--w /usr/bin/wget -p x -k pkgwatch_net
--w /bin/wget     -p x -k pkgwatch_net
+# pkgwatch: suspicious dirs often used by scripts
+-w /usr/local/bin -p wa -k pkgwatch_shell
+-w /usr/local/sbin -p wa -k pkgwatch_shell
+-w /opt -p wa -k pkgwatch_shell
 
--w /bin/bash     -p x -k pkgwatch_shell
--w /usr/bin/bash -p x -k pkgwatch_shell
--w /bin/sh       -p x -k pkgwatch_shell
--w /usr/bin/sh   -p x -k pkgwatch_shell
-
--w /etc/cron.d         -p wa -k pkgwatch_persist
--w /etc/crontab        -p wa -k pkgwatch_persist
--w /etc/cron.daily     -p wa -k pkgwatch_persist
--w /etc/cron.hourly    -p wa -k pkgwatch_persist
--w /etc/cron.weekly    -p wa -k pkgwatch_persist
--w /etc/cron.monthly   -p wa -k pkgwatch_persist
+# pkgwatch: persistence locations
 -w /etc/systemd/system -p wa -k pkgwatch_persist
--w /lib/systemd/system -p wa -k pkgwatch_persist
+-w /etc/cron.d -p wa -k pkgwatch_persist
+-w /etc/crontab -p wa -k pkgwatch_persist
+-w /var/spool/cron -p wa -k pkgwatch_persist
+
+# pkgwatch: network fetch tools often used in installers
+-w /usr/bin/curl -p x -k pkgwatch_net
+-w /usr/bin/wget -p x -k pkgwatch_net
 EOF
 
-augenrules --load
-systemctl enable --now auditd
-systemctl restart auditd
+# Load rules
+augenrules --load || true
+
+# Print audit status (helpful diagnostics)
+auditctl -s || true
