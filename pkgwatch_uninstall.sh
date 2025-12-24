@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eu
+( set -o pipefail ) 2>/dev/null && set -o pipefail || true
+
 
 APP="pkgwatch"
 INSTALL_DIR="/opt/pkgwatch"
@@ -32,4 +34,5 @@ say "Removing ${INSTALL_DIR}..."
 rm -rf "${INSTALL_DIR}"
 
 say "✅ Uninstalled."
+
 
