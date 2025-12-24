@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eu
+( set -o pipefail ) 2>/dev/null && set -o pipefail || true
 
 INSTALL_DIR="/opt/pkgwatch"
 CONF="${INSTALL_DIR}/etc/pkgwatch.conf"
@@ -102,3 +103,4 @@ curl -fsS -X POST \
   >/dev/null
 
 : > "${QUEUE_FILE}"
+
