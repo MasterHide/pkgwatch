@@ -4,17 +4,15 @@ set -eu
 
 INSTALL_DIR="/opt/pkgwatch"
 CONF="${INSTALL_DIR}/etc/pkgwatch.conf"
-
 [[ -r "${CONF}" ]] || exit 0
 # shellcheck disable=SC1090
-source "${CONF}"
-
-DPKG_LOG="${DPKG_LOG:-/var/log/dpkg.log}"
-QUIET_SECONDS="${QUIET_SECONDS:-120}"
-MAX_PKGS_PER_SECTION="${MAX_PKGS_PER_SECTION:-60}"
+source <(sed 's/\r$//' "${CONF}")
 
 BOT_TOKEN="${BOT_TOKEN:-}"
 CHAT_ID="${CHAT_ID:-}"
+QUIET_SECONDS="${QUIET_SECONDS:-120}"
+MAX_PKGS_PER_SECTION="${MAX_PKGS_PER_SECTION:-60}"
+FORCE_SEND="${FORCE_SEND:-0}"
 
 QUEUE_FILE="${INSTALL_DIR}/queue/dpkg.events"
 LAST_EVENT_FILE="${INSTALL_DIR}/state/last_event_epoch"
@@ -25,18 +23,16 @@ mkdir -p "${INSTALL_DIR}/queue" "${INSTALL_DIR}/state" "${INSTALL_DIR}/log"
 exec 9>"${LOCK_FILE}"
 flock -n 9 || exit 0
 
-if [[ -z "${BOT_TOKEN}" || -z "${CHAT_ID}" || "${BOT_TOKEN}" == "CHANGE_ME" || "${CHAT_ID}" == "CHANGE_ME" ]]; then
-  exit 0
-fi
-
+[[ -n "${BOT_TOKEN}" && -n "${CHAT_ID}" && "${BOT_TOKEN}" != "CHANGE_ME" && "${CHAT_ID}" != "CHANGE_ME" ]] || exit 0
 [[ -s "${QUEUE_FILE}" ]] || exit 0
 [[ -f "${LAST_EVENT_FILE}" ]] || exit 0
 
-now="$(date +%s)"
-last="$(cat "${LAST_EVENT_FILE}" 2>/dev/null || echo 0)"
-
-if (( now - last < QUIET_SECONDS )); then
-  exit 0
+if [[ "${FORCE_SEND}" != "1" ]]; then
+  now="$(date +%s)"
+  last="$(cat "${LAST_EVENT_FILE}" 2>/dev/null || echo 0)"
+  if (( now - last < QUIET_SECONDS )); then
+    exit 0
+  fi
 fi
 
 installs="$(awk '$3=="install"{print $4}' "${QUEUE_FILE}" | sed 's/:.*$//' | sort -u)"
@@ -56,18 +52,11 @@ md_escape() {
 }
 
 format_list() {
-  local title="$1"
-  local list="$2"
-  local max="$3"
+  local title="$1" list="$2" max="$3"
   local count
   count="$(printf "%s\n" "${list}" | sed '/^$/d' | wc -l | awk '{print $1}')"
-
   echo "${title}:"
-  if [[ "${count}" -eq 0 ]]; then
-    echo " - none"
-    return
-  fi
-
+  if [[ "${count}" -eq 0 ]]; then echo " - none"; return; fi
   if [[ "${count}" -le "${max}" ]]; then
     printf "%s\n" "${list}" | sed '/^$/d' | sed 's/^/ - /'
   else
@@ -88,7 +77,7 @@ EOF
 
 msg="$(printf "%s" "${msg_raw}" | md_escape)"
 
-# Hard cap to avoid Telegram message-length rejection (keep some margin)
+# Telegram-safe length cap
 MAX_CHARS=3800
 if (( ${#msg} > MAX_CHARS )); then
   msg="${msg:0:MAX_CHARS}..."
@@ -103,4 +92,3 @@ curl -fsS -X POST \
   >/dev/null
 
 : > "${QUEUE_FILE}"
-
