@@ -1,6 +1,5 @@
 [Unit]
 Description=PkgWatch auditd summary flush to Telegram
-After=auditd.service
 
 [Service]
 Type=oneshot
