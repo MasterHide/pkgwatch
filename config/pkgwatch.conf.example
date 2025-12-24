@@ -8,7 +8,7 @@ CHAT_ID="CHANGE_ME"
 QUIET_SECONDS="120"
 
 # Max packages to show in each section before truncating
-MAX_PKGS_PER_SECTION="60"
+MAX_PKGS="60"
 
-# dpkg log file location
+# dpkg log location (default ok for Debian/Ubuntu)
 DPKG_LOG="/var/log/dpkg.log"
