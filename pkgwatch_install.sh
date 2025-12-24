@@ -44,7 +44,6 @@ install_deps() {
   say "Installing dependencies..."
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y curl coreutils util-linux
   apt-get install -y curl coreutils util-linux auditd
 }
 
@@ -148,5 +147,6 @@ main() {
 }
 
 main "$@"
+
 
 
