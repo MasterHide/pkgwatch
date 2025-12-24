@@ -13,6 +13,8 @@ die() { echo -e "[$APP] ERROR: $*" >&2; exit 1; }
 say "Stopping/disabling services..."
 systemctl disable --now pkgwatch-collect.path 2>/dev/null || true
 systemctl disable --now pkgwatch-flush.timer 2>/dev/null || true
+systemctl disable --now pkgwatch-audit.timer 2>/dev/null || true
+
 
 say "Removing systemd unit files..."
 rm -f \
@@ -20,6 +22,9 @@ rm -f \
   "${SYSTEMD_DIR}/pkgwatch-collect.path" \
   "${SYSTEMD_DIR}/pkgwatch-flush.service" \
   "${SYSTEMD_DIR}/pkgwatch-flush.timer"
+  "${SYSTEMD_DIR}/pkgwatch-audit.service" \
+  "${SYSTEMD_DIR}/pkgwatch-audit.timer" \
+
 
 systemctl daemon-reload
 
@@ -27,3 +32,4 @@ say "Removing ${INSTALL_DIR}..."
 rm -rf "${INSTALL_DIR}"
 
 say "✅ Uninstalled."
+
