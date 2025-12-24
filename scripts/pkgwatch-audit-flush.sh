@@ -19,31 +19,33 @@ mkdir -p "${INSTALL_DIR}/state" "${INSTALL_DIR}/log"
 exec 9>"${LOCK_FILE}"
 flock -n 9 || exit 0
 
-# cursor = last processed audit event epoch seconds
-last="0"
-[[ -f "${STATE_FILE}" ]] && last="$(cat "${STATE_FILE}" || echo 0)"
-now="$(date +%s)"
+# Cursor is a human timestamp ausearch understands: "YYYY-MM-DD HH:MM:SS"
+# If missing, start from "now-10m" to avoid flooding on first run.
+last_ts="now-10m"
+if [[ -f "${STATE_FILE}" ]]; then
+  last_ts="$(cat "${STATE_FILE}" || echo "now-10m")"
+fi
 
-# Get audit events since last cursor (requires auditd running)
-# We search by keys we set in rules
+# Always advance cursor first (prevents duplicates if send fails)
+now_ts="$(date '+%Y-%m-%d %H:%M:%S')"
+echo "${now_ts}" > "${STATE_FILE}"
+
+# Collect audit events since last cursor (keys from audit rules)
 out="$(
   {
-    ausearch -k pkgwatch_git   -ts "${last}" 2>/dev/null || true
-    ausearch -k pkgwatch_net   -ts "${last}" 2>/dev/null || true
-    ausearch -k pkgwatch_shell -ts "${last}" 2>/dev/null || true
-    ausearch -k pkgwatch_persist -ts "${last}" 2>/dev/null || true
+    ausearch -k pkgwatch_git     -ts "${last_ts}" 2>/dev/null || true
+    ausearch -k pkgwatch_net     -ts "${last_ts}" 2>/dev/null || true
+    ausearch -k pkgwatch_shell   -ts "${last_ts}" 2>/dev/null || true
+    ausearch -k pkgwatch_persist -ts "${last_ts}" 2>/dev/null || true
   } | tail -n 250
 )"
-
-# advance cursor early to avoid duplicates on failure
-echo "${now}" > "${STATE_FILE}"
 
 [[ -n "${out// }" ]] || exit 0
 
 host="$(hostname)"
 ts="$(date -Is)"
 
-# Simple Telegram MarkdownV2 escape
+# Telegram MarkdownV2 escape
 md_escape() {
   sed -e 's/\\/\\\\/g' \
       -e 's/_/\\_/g'  -e 's/\*/\\*/g' -e 's/\[/\\[/g' -e 's/\]/\\]/g' \
@@ -53,7 +55,7 @@ md_escape() {
       -e 's/\./\\./g' -e 's/!/\\!/g'
 }
 
-msg_raw="🛡 *Script/Repo activity* on ${host}
+msg_raw="🛡 Script/Repo activity on ${host}
 🕒 ${ts}
 
 Last audit events (trimmed):
@@ -62,8 +64,11 @@ ${out}
 
 msg="$(printf "%s" "${msg_raw}" | md_escape)"
 
-curl -fsS -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-  -d "chat_id=${CHAT_ID}" \
-  -d "text=${msg}" \
-  -d "parse_mode=MarkdownV2" \
+# Explicit form encoding
+curl -fsS -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "chat_id=${CHAT_ID}" \
+  --data-urlencode "text=${msg}" \
+  --data-urlencode "parse_mode=MarkdownV2" \
+  "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
   >/dev/null
