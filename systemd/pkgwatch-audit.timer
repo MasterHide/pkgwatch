@@ -2,8 +2,8 @@
 Description=Run PkgWatch auditd flush periodically
 
 [Timer]
-OnBootSec=3min
-OnUnitActiveSec=2min
+OnBootSec=90
+OnUnitActiveSec=120
 Unit=pkgwatch-audit.service
 
 [Install]
