@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-set -eu
-( set -o pipefail ) 2>/dev/null && set -o pipefail || true
+set -euo pipefail
 
 APP="pkgwatch"
 INSTALL_DIR="/opt/pkgwatch"
@@ -12,14 +11,14 @@ die() { echo -e "[$APP] ERROR: $*" >&2; exit 1; }
 [[ "${EUID:-$(id -u)}" -eq 0 ]] || die "Run as root: sudo bash pkgwatch_uninstall.sh"
 
 say "Stopping/disabling services..."
-systemctl disable --now pkgwatch-collect.path 2>/dev/null || true
+systemctl disable --now pkgwatch-collect.timer 2>/dev/null || true
 systemctl disable --now pkgwatch-flush.timer 2>/dev/null || true
 systemctl disable --now pkgwatch-audit.timer 2>/dev/null || true
 
 say "Removing systemd unit files..."
 rm -f \
   "${SYSTEMD_DIR}/pkgwatch-collect.service" \
-  "${SYSTEMD_DIR}/pkgwatch-collect.path" \
+  "${SYSTEMD_DIR}/pkgwatch-collect.timer" \
   "${SYSTEMD_DIR}/pkgwatch-flush.service" \
   "${SYSTEMD_DIR}/pkgwatch-flush.timer" \
   "${SYSTEMD_DIR}/pkgwatch-audit.service" \
