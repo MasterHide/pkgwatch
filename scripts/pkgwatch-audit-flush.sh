@@ -2,12 +2,11 @@
 set -eu
 ( set -o pipefail ) 2>/dev/null && set -o pipefail || true
 
-
 INSTALL_DIR="/opt/pkgwatch"
 CONF="${INSTALL_DIR}/etc/pkgwatch.conf"
 [[ -r "${CONF}" ]] || exit 0
 # shellcheck disable=SC1090
-source "${CONF}"
+source <(sed 's/\r$//' "${CONF}")
 
 BOT_TOKEN="${BOT_TOKEN:-}"
 CHAT_ID="${CHAT_ID:-}"
@@ -21,18 +20,15 @@ mkdir -p "${INSTALL_DIR}/state" "${INSTALL_DIR}/log"
 exec 9>"${LOCK_FILE}"
 flock -n 9 || exit 0
 
-# Cursor is a human timestamp ausearch understands: "YYYY-MM-DD HH:MM:SS"
-# If missing, start from "now-10m" to avoid flooding on first run.
 last_ts="now-10m"
 if [[ -f "${STATE_FILE}" ]]; then
   last_ts="$(cat "${STATE_FILE}" || echo "now-10m")"
 fi
 
-# Always advance cursor first (prevents duplicates if send fails)
+# advance cursor early to avoid duplicates
 now_ts="$(date '+%Y-%m-%d %H:%M:%S')"
 echo "${now_ts}" > "${STATE_FILE}"
 
-# Collect audit events since last cursor (keys from audit rules)
 out="$(
   {
     ausearch -k pkgwatch_git     -ts "${last_ts}" 2>/dev/null || true
@@ -47,7 +43,6 @@ out="$(
 host="$(hostname)"
 ts="$(date -Is)"
 
-# Telegram MarkdownV2 escape
 md_escape() {
   sed -e 's/\\/\\\\/g' \
       -e 's/_/\\_/g'  -e 's/\*/\\*/g' -e 's/\[/\\[/g' -e 's/\]/\\]/g' \
@@ -65,8 +60,11 @@ ${out}
 "
 
 msg="$(printf "%s" "${msg_raw}" | md_escape)"
+MAX_CHARS=3800
+if (( ${#msg} > MAX_CHARS )); then
+  msg="${msg:0:MAX_CHARS}..."
+fi
 
-# Explicit form encoding
 curl -fsS -X POST \
   -H "Content-Type: application/x-www-form-urlencoded" \
   --data-urlencode "chat_id=${CHAT_ID}" \
