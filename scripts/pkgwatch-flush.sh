@@ -24,25 +24,20 @@ mkdir -p "${INSTALL_DIR}/queue" "${INSTALL_DIR}/state" "${INSTALL_DIR}/log"
 exec 9>"${LOCK_FILE}"
 flock -n 9 || exit 0
 
-# Require Telegram config
 if [[ -z "${BOT_TOKEN}" || -z "${CHAT_ID}" || "${BOT_TOKEN}" == "CHANGE_ME" || "${CHAT_ID}" == "CHANGE_ME" ]]; then
-  # Don't spam logs; just do nothing until configured
   exit 0
 fi
 
-# Nothing queued
 [[ -s "${QUEUE_FILE}" ]] || exit 0
 [[ -f "${LAST_EVENT_FILE}" ]] || exit 0
 
 now="$(date +%s)"
 last="$(cat "${LAST_EVENT_FILE}" 2>/dev/null || echo 0)"
 
-# Wait for quiet period
 if (( now - last < QUIET_SECONDS )); then
   exit 0
 fi
 
-# Build unique package lists, drop arch suffix
 installs="$(awk '$3=="install"{print $4}' "${QUEUE_FILE}" | sed 's/:.*$//' | sort -u)"
 upgrades="$(awk '$3=="upgrade"{print $4}' "${QUEUE_FILE}" | sed 's/:.*$//' | sort -u)"
 removes="$(awk '$3=="remove"{print $4}' "${QUEUE_FILE}" | sed 's/:.*$//' | sort -u)"
@@ -50,9 +45,7 @@ removes="$(awk '$3=="remove"{print $4}' "${QUEUE_FILE}" | sed 's/:.*$//' | sort 
 host="$(hostname)"
 ts="$(date -Is)"
 
-# Telegram Markdown: escape special chars to avoid formatting breaks
 md_escape() {
-  # Escapes: _ * [ ] ( ) ~ ` > # + - = | { } . !
   sed -e 's/\\/\\\\/g' \
       -e 's/_/\\_/g'  -e 's/\*/\\*/g' -e 's/\[/\\[/g' -e 's/\]/\\]/g' \
       -e 's/(/\\(/g'  -e 's/)/\\)/g' -e 's/~/\\~/g'  -e 's/`/\\`/g' \
@@ -94,12 +87,18 @@ EOF
 
 msg="$(printf "%s" "${msg_raw}" | md_escape)"
 
-# Send via Telegram (MarkdownV2 for reliable escaping)
-curl -fsS -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-  -d "chat_id=${CHAT_ID}" \
-  -d "text=${msg}" \
-  -d "parse_mode=MarkdownV2" \
+# Hard cap to avoid Telegram message-length rejection (keep some margin)
+MAX_CHARS=3800
+if (( ${#msg} > MAX_CHARS )); then
+  msg="${msg:0:MAX_CHARS}..."
+fi
+
+curl -fsS -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "chat_id=${CHAT_ID}" \
+  --data-urlencode "text=${msg}" \
+  --data-urlencode "parse_mode=MarkdownV2" \
+  "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
   >/dev/null
 
-# Clear queue after successful send
 : > "${QUEUE_FILE}"
