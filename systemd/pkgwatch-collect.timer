@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PkgWatch collect frequently (stable alternative to .path)
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=15s
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
