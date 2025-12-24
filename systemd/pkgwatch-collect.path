@@ -2,7 +2,8 @@
 Description=PkgWatch watch /var/log/dpkg.log
 
 [Path]
-PathModified=/var/log/dpkg.log
+PathChanged=/var/log/dpkg.log
+Unit=pkgwatch-collect.service
 
 [Install]
 WantedBy=multi-user.target
