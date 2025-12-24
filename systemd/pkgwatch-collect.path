@@ -1,0 +1,8 @@
+[Unit]
+Description=PkgWatch watch /var/log/dpkg.log
+
+[Path]
+PathModified=/var/log/dpkg.log
+
+[Install]
+WantedBy=multi-user.target

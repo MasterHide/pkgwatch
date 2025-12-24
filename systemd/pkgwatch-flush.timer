@@ -1,0 +1,10 @@
+[Unit]
+Description=Run PkgWatch flush periodically (rate-limited)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=pkgwatch-flush.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=PkgWatch flush queued dpkg events to Telegram
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pkgwatch/bin/pkgwatch-flush.sh

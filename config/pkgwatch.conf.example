@@ -1,0 +1,14 @@
+# Telegram bot token (from @BotFather)
+BOT_TOKEN="CHANGE_ME"
+
+# Telegram chat ID (user or group)
+CHAT_ID="CHANGE_ME"
+
+# Quiet period before sending one summary message (rate-limit / debounce)
+QUIET_SECONDS="120"
+
+# Max packages to show in each section before truncating
+MAX_PKGS_PER_SECTION="60"
+
+# dpkg log file location
+DPKG_LOG="/var/log/dpkg.log"

@@ -1,0 +1,6 @@
+[Unit]
+Description=PkgWatch collect dpkg events into queue
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pkgwatch/bin/pkgwatch-collect.sh
