@@ -2,9 +2,10 @@
 Description=Run PkgWatch auditd flush periodically
 
 [Timer]
-OnBootSec=90
-OnUnitActiveSec=120
-Unit=pkgwatch-audit.service
+OnBootSec=90s
+OnUnitActiveSec=120s
+AccuracySec=15s
+Persistent=true
 
 [Install]
 WantedBy=timers.target
