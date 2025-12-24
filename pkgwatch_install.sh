@@ -56,12 +56,16 @@ install_files() {
   say "Installing scripts..."
   install -m 0700 "scripts/pkgwatch-collect.sh" "${BIN_DIR}/pkgwatch-collect.sh"
   install -m 0700 "scripts/pkgwatch-flush.sh"   "${BIN_DIR}/pkgwatch-flush.sh"
+  install -m 0700 "scripts/pkgwatch-audit-setup.sh" "${BIN_DIR}/pkgwatch-audit-setup.sh"
+  install -m 0700 "scripts/pkgwatch-audit-flush.sh" "${BIN_DIR}/pkgwatch-audit-flush.sh"
 
   say "Installing systemd units..."
   install -m 0644 "systemd/pkgwatch-collect.service" "${SYSTEMD_DIR}/pkgwatch-collect.service"
   install -m 0644 "systemd/pkgwatch-collect.path"    "${SYSTEMD_DIR}/pkgwatch-collect.path"
   install -m 0644 "systemd/pkgwatch-flush.service"   "${SYSTEMD_DIR}/pkgwatch-flush.service"
   install -m 0644 "systemd/pkgwatch-flush.timer"     "${SYSTEMD_DIR}/pkgwatch-flush.timer"
+  install -m 0644 "systemd/pkgwatch-audit.service" "${SYSTEMD_DIR}/pkgwatch-audit.service"
+  install -m 0644 "systemd/pkgwatch-audit.timer" "${SYSTEMD_DIR}/pkgwatch-audit.timer"
 }
 
 create_config() {
@@ -90,7 +94,13 @@ enable_services() {
   systemctl daemon-reload
   systemctl enable --now pkgwatch-collect.path
   systemctl enable --now pkgwatch-flush.timer
+
+  # setup audit rules once (idempotent)
+  "${BIN_DIR}/pkgwatch-audit-setup.sh" || true
+
+  systemctl enable --now pkgwatch-audit.timer
 }
+
 
 post_install_message() {
   cat <<EOF
@@ -113,10 +123,14 @@ Test:
 Status:
   systemctl status pkgwatch-collect.path
   systemctl status pkgwatch-flush.timer
+  systemctl status pkgwatch-audit.timer
+
 
 Logs:
   journalctl -u pkgwatch-collect.service -n 50 --no-pager
   journalctl -u pkgwatch-flush.service -n 50 --no-pager
+  journalctl -u pkgwatch-audit.service -n 50 --no-pager
+
 
 EOF
 }
@@ -133,3 +147,4 @@ main() {
 }
 
 main "$@"
+
