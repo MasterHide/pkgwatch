@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-set -eu
-( set -o pipefail ) 2>/dev/null && set -o pipefail || true
+set -euo pipefail
 
 APP="pkgwatch"
 INSTALL_DIR="/opt/pkgwatch"
@@ -9,29 +8,33 @@ BIN_DIR="${INSTALL_DIR}/bin"
 QUEUE_DIR="${INSTALL_DIR}/queue"
 STATE_DIR="${INSTALL_DIR}/state"
 LOG_DIR="${INSTALL_DIR}/log"
+
 SYSTEMD_DIR="/etc/systemd/system"
 
-say() { echo "[$APP] $*"; }
-die() { echo "[$APP] ERROR: $*" >&2; exit 1; }
+say() { echo -e "[$APP] $*"; }
+die() { echo -e "[$APP] ERROR: $*" >&2; exit 1; }
 
 require_root() {
-  [[ "${EUID:-$(id -u)}" -eq 0 ]] || die "Run as root: sudo bash install.sh"
+  [[ "${EUID:-$(id -u)}" -eq 0 ]] || die "Run as root: sudo bash pkgwatch_install.sh"
 }
 
 detect_os() {
   [[ -f /etc/os-release ]] || die "Cannot find /etc/os-release"
   # shellcheck disable=SC1091
-  . /etc/os-release
+  source /etc/os-release
+
   case "${ID:-}" in
     ubuntu)
-      ver_major="${VERSION_ID%%.*}"
-      [[ "${ver_major}" -ge 20 ]] || die "Ubuntu ${VERSION_ID} not supported. Need Ubuntu 20.04+."
+      # VERSION_ID like "20.04"
+      major="${VERSION_ID%%.*}"
+      [[ "$major" -ge 20 ]] || die "Ubuntu ${VERSION_ID} not supported. Need 20.04+."
       ;;
     debian)
-      [[ "${VERSION_ID}" -ge 12 ]] || die "Debian ${VERSION_ID} not supported. Need Debian 12+."
+      # VERSION_ID like "12"
+      [[ "${VERSION_ID}" -ge 12 ]] || die "Debian ${VERSION_ID} not supported. Need 12+."
       ;;
     *)
-      die "Unsupported OS: ${ID:-unknown}"
+      die "Unsupported OS: ${ID:-unknown}. Supported: Ubuntu 20.04+ / Debian 12+."
       ;;
   esac
 }
@@ -40,7 +43,7 @@ install_deps() {
   say "Installing dependencies..."
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y bash curl coreutils util-linux dos2unix auditd git >/dev/null
+  apt-get install -y --no-install-recommends curl coreutils util-linux gawk grep sed auditd
 }
 
 create_dirs() {
@@ -57,26 +60,27 @@ install_files() {
 
   say "Installing systemd units..."
   install -m 0644 "systemd/pkgwatch-collect.service" "${SYSTEMD_DIR}/pkgwatch-collect.service"
-  install -m 0644 "systemd/pkgwatch-collect.path"    "${SYSTEMD_DIR}/pkgwatch-collect.path"
+  install -m 0644 "systemd/pkgwatch-collect.timer"   "${SYSTEMD_DIR}/pkgwatch-collect.timer"
+
   install -m 0644 "systemd/pkgwatch-flush.service"   "${SYSTEMD_DIR}/pkgwatch-flush.service"
   install -m 0644 "systemd/pkgwatch-flush.timer"     "${SYSTEMD_DIR}/pkgwatch-flush.timer"
+
   install -m 0644 "systemd/pkgwatch-audit.service"   "${SYSTEMD_DIR}/pkgwatch-audit.service"
   install -m 0644 "systemd/pkgwatch-audit.timer"     "${SYSTEMD_DIR}/pkgwatch-audit.timer"
-
-  # CRLF hardening for installed scripts (protect against bad uploads)
-  dos2unix -q "${BIN_DIR}/pkgwatch-collect.sh" "${BIN_DIR}/pkgwatch-flush.sh" "${BIN_DIR}/pkgwatch-audit-setup.sh" "${BIN_DIR}/pkgwatch-audit-flush.sh" 2>/dev/null || true
 }
 
 create_config() {
   say "Creating config..."
   if [[ -f "${ETC_DIR}/pkgwatch.conf" ]]; then
-    say "Config exists: ${ETC_DIR}/pkgwatch.conf (keeping)"
+    say "Config already exists: ${ETC_DIR}/pkgwatch.conf (keeping it)"
     return
   fi
 
   install -m 0600 "config/pkgwatch.conf.example" "${ETC_DIR}/pkgwatch.conf"
 
-  # allow env prefill
+  # Normalize config line endings too (safety)
+  sed -i 's/\r$//' "${ETC_DIR}/pkgwatch.conf"
+
   if [[ -n "${BOT_TOKEN:-}" ]]; then
     sed -i "s/^BOT_TOKEN=.*/BOT_TOKEN=\"${BOT_TOKEN//\"/\\\"}\"/" "${ETC_DIR}/pkgwatch.conf"
   fi
@@ -84,20 +88,18 @@ create_config() {
     sed -i "s/^CHAT_ID=.*/CHAT_ID=\"${CHAT_ID//\"/\\\"}\"/" "${ETC_DIR}/pkgwatch.conf"
   fi
 
-  # CRLF hardening (your exact bug)
-  sed -i 's/\r$//' "${ETC_DIR}/pkgwatch.conf" || true
-  chmod 0600 "${ETC_DIR}/pkgwatch.conf"
-
   say "Config created: ${ETC_DIR}/pkgwatch.conf"
 }
 
 enable_services() {
   say "Enabling services..."
   systemctl daemon-reload
-  systemctl enable --now pkgwatch-collect.path
+
+  # Collect + flush timers
+  systemctl enable --now pkgwatch-collect.timer
   systemctl enable --now pkgwatch-flush.timer
 
-  # audit rules setup once (idempotent)
+  # Setup audit rules once (idempotent)
   "${BIN_DIR}/pkgwatch-audit-setup.sh" || true
   systemctl enable --now pkgwatch-audit.timer
 }
@@ -113,15 +115,16 @@ One-line install (recommended):
 Config:
   sudo nano ${ETC_DIR}/pkgwatch.conf
 
-Force test (no 120s wait):
+Force test (send even if quiet window not reached):
   sudo FORCE_SEND=1 systemctl start pkgwatch-flush.service
+  sudo FORCE_SEND=1 systemctl start pkgwatch-audit.service
 
 Normal test:
   sudo apt-get install -y cowsay
-  # wait QUIET_SECONDS (default 120s) => one message
+  # wait QUIET_SECONDS (default 120s) => one Telegram summary
 
 Services:
-  systemctl status pkgwatch-collect.path
+  systemctl status pkgwatch-collect.timer
   systemctl status pkgwatch-flush.timer
   systemctl status pkgwatch-audit.timer
 
