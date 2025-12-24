@@ -1,5 +1,8 @@
 [Unit]
 Description=PkgWatch collect dpkg events into queue
+# Prevent start-limit-hit during large installs
+StartLimitIntervalSec=0
+StartLimitBurst=0
 
 [Service]
 Type=oneshot
