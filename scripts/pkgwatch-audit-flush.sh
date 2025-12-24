@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-set -eu
-( set -o pipefail ) 2>/dev/null && set -o pipefail || true
+set -euo pipefail
 
 INSTALL_DIR="/opt/pkgwatch"
 CONF="${INSTALL_DIR}/etc/pkgwatch.conf"
 [[ -r "${CONF}" ]] || exit 0
 # shellcheck disable=SC1090
-source <(sed 's/\r$//' "${CONF}")
+source "${CONF}"
 
 BOT_TOKEN="${BOT_TOKEN:-}"
 CHAT_ID="${CHAT_ID:-}"
@@ -20,24 +19,25 @@ mkdir -p "${INSTALL_DIR}/state" "${INSTALL_DIR}/log"
 exec 9>"${LOCK_FILE}"
 flock -n 9 || exit 0
 
-last_ts="now-10m"
-if [[ -f "${STATE_FILE}" ]]; then
-  last_ts="$(cat "${STATE_FILE}" || echo "now-10m")"
-fi
+last="0"
+[[ -f "${STATE_FILE}" ]] && last="$(cat "${STATE_FILE}" 2>/dev/null || echo 0)"
+now="$(date +%s)"
 
-# advance cursor early to avoid duplicates
-now_ts="$(date '+%Y-%m-%d %H:%M:%S')"
-echo "${now_ts}" > "${STATE_FILE}"
+# FORCE_SEND=1: use last=0 to show recent buffer
+if [[ "${FORCE_SEND:-0}" == "1" ]]; then
+  last="0"
+fi
 
 out="$(
   {
-    ausearch -k pkgwatch_git     -ts "${last_ts}" 2>/dev/null || true
-    ausearch -k pkgwatch_net     -ts "${last_ts}" 2>/dev/null || true
-    ausearch -k pkgwatch_shell   -ts "${last_ts}" 2>/dev/null || true
-    ausearch -k pkgwatch_persist -ts "${last_ts}" 2>/dev/null || true
+    ausearch -k pkgwatch_git     -ts "${last}" 2>/dev/null || true
+    ausearch -k pkgwatch_net     -ts "${last}" 2>/dev/null || true
+    ausearch -k pkgwatch_shell   -ts "${last}" 2>/dev/null || true
+    ausearch -k pkgwatch_persist -ts "${last}" 2>/dev/null || true
   } | tail -n 250
 )"
 
+echo "${now}" > "${STATE_FILE}"
 [[ -n "${out// }" ]] || exit 0
 
 host="$(hostname)"
@@ -52,7 +52,7 @@ md_escape() {
       -e 's/\./\\./g' -e 's/!/\\!/g'
 }
 
-msg_raw="🛡 Script/Repo activity on ${host}
+msg_raw="🛡 *Script/Repo activity* on ${host}
 🕒 ${ts}
 
 Last audit events (trimmed):
@@ -60,15 +60,11 @@ ${out}
 "
 
 msg="$(printf "%s" "${msg_raw}" | md_escape)"
-MAX_CHARS=3800
-if (( ${#msg} > MAX_CHARS )); then
-  msg="${msg:0:MAX_CHARS}..."
-fi
+msg="${msg:0:3800}"
 
-curl -fsS -X POST \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "chat_id=${CHAT_ID}" \
-  --data-urlencode "text=${msg}" \
-  --data-urlencode "parse_mode=MarkdownV2" \
-  "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+curl -fsS --max-time 15 --retry 3 --retry-delay 2 \
+  -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+  -d "chat_id=${CHAT_ID}" \
+  -d "text=${msg}" \
+  -d "parse_mode=MarkdownV2" \
   >/dev/null
