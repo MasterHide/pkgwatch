@@ -2,9 +2,10 @@
 Description=Run PkgWatch flush periodically (rate-limited)
 
 [Timer]
-OnBootSec=60
-OnUnitActiveSec=60
-Unit=pkgwatch-flush.service
+OnBootSec=60s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Persistent=true
 
 [Install]
 WantedBy=timers.target
